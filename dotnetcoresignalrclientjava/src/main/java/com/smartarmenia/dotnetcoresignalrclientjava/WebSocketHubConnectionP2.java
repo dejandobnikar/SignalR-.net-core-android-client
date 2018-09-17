@@ -34,14 +34,20 @@ public class WebSocketHubConnectionP2 implements HubConnection {
     private List<HubConnectionListener> listeners = new ArrayList<>();
     private Map<String, List<HubEventListener>> eventListeners = new HashMap<>();
     private Uri parsedUri;
+    private final boolean skipConnectionId;
     private Gson gson = new Gson();
 
     private String connectionId = null;
     private String authHeader;
 
     public WebSocketHubConnectionP2(String hubUrl, String authHeader) {
+        this(hubUrl, authHeader, false);
+    }
+
+    public WebSocketHubConnectionP2(String hubUrl, String authHeader, boolean skipConnectionId) {
         this.authHeader = authHeader;
         parsedUri = Uri.parse(hubUrl);
+        this.skipConnectionId = skipConnectionId;
     }
 
     @Override
@@ -50,7 +56,7 @@ public class WebSocketHubConnectionP2 implements HubConnection {
             return;
 
         Runnable runnable;
-        if (connectionId == null) {
+        if (connectionId == null && !skipConnectionId) {
             runnable = new Runnable() {
                 public void run() {
                     getConnectionId();
@@ -86,12 +92,12 @@ public class WebSocketHubConnectionP2 implements HubConnection {
             if (responseCode == 200) {
                 String result = WebSocketHubConnectionP2.InputStreamConverter.convert(connection.getInputStream());
                 JsonElement jsonElement = gson.fromJson(result, JsonElement.class);
-                String connectionId = jsonElement.getAsJsonObject().get("connectionId").getAsString();
-                JsonElement availableTransportsElements = jsonElement.getAsJsonObject().get("availableTransports");
+                String connectionId = jsonElement.getAsJsonObject().get("ConnectionId").getAsString();
+                JsonElement availableTransportsElements = jsonElement.getAsJsonObject().get("AvailableTransports");
                 List<JsonElement> availableTransports = Arrays.asList(gson.fromJson(availableTransportsElements, JsonElement[].class));
                 boolean webSocketAvailable = false;
                 for (JsonElement element : availableTransports) {
-                    if (element.getAsJsonObject().get("transport").getAsString().equals("WebSockets")) {
+                    if (element.getAsJsonObject().get("Transport").getAsString().equals("WebSockets")) {
                         webSocketAvailable = true;
                         break;
                     }
@@ -113,7 +119,9 @@ public class WebSocketHubConnectionP2 implements HubConnection {
 
     private void connectClient() {
         Uri.Builder uriBuilder = parsedUri.buildUpon();
-        uriBuilder.appendQueryParameter("id", connectionId);
+        if (!skipConnectionId) {
+            uriBuilder.appendQueryParameter("id", connectionId);
+        }
         uriBuilder.scheme(parsedUri.getScheme().replace("http", "ws"));
         Uri uri = uriBuilder.build();
         Map<String, String> headers = new HashMap<>();
